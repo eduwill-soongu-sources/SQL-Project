@@ -1534,3 +1534,117 @@ ALTER TABLE FOLLOWS ADD CONSTRAINT fk_follows_following FOREIGN KEY (following_i
 -- POST_TAGS
 ALTER TABLE POST_TAGS ADD CONSTRAINT fk_post_tags_post FOREIGN KEY (post_id) REFERENCES POSTS(post_id) ON DELETE CASCADE;
 ALTER TABLE POST_TAGS ADD CONSTRAINT fk_post_tags_tag FOREIGN KEY (tag_id) REFERENCES HASHTAGS(tag_id) ON DELETE CASCADE;
+
+-- =====================================================================
+-- 파트 E: 보강 스크립트
+-- 1) 0-케이스 확실화 데이터 추가
+-- 2) 수치형 분석 컬럼 보강 및 값 채우기
+-- 3) UNPIVOT 전용 와이드 테이블 생성 및 데이터 채움
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- E-1) 0-케이스 확실화
+--  - 프로필/팔로우/게시물/좋아요/댓글 모두 없는 유저 2명 추가
+--  - 좋아요/댓글이 전혀 없는 게시물 1건 추가
+--  - 어떤 게시물에서도 사용되지 않는 해시태그 1건 추가
+-- ---------------------------------------------------------------------
+INSERT ALL
+    INTO USERS (user_id, username, email, registration_date, last_login_date, manager_id) VALUES (41, 'ghost1', 'ghost1@example.com', TO_DATE('2023-01-01', 'YYYY-MM-DD'), NULL, NULL)
+    INTO USERS (user_id, username, email, registration_date, last_login_date, manager_id) VALUES (42, 'ghost2', 'ghost2@example.com', TO_DATE('2024-01-01', 'YYYY-MM-DD'), NULL, NULL)
+SELECT 1 FROM DUAL;
+
+-- 좋아요/댓글 0건 보장용 게시물 (임의로 파이리 유저에게 추가)
+INSERT INTO POSTS (post_id, user_id, content, post_type, creation_date)
+VALUES (91, 22, '테스트용: 좋아요/댓글 0건 포스트', 'photo', TO_TIMESTAMP('2024-05-21 23:59:59', 'YYYY-MM-DD HH24:MI:SS'));
+
+-- 미사용 해시태그 추가 (POST_TAGS에 연결하지 않음)
+INSERT INTO HASHTAGS (tag_id, tag_name) VALUES (1100, '#미사용');
+
+COMMIT;
+
+-- ---------------------------------------------------------------------
+-- E-2) 수치형 분석 컬럼 보강
+--  - POSTS: view_count, reaction_score
+--  - COMMENTS: sentiment_score
+--  - 간단한 규칙 기반으로 일괄 산출하여 창구 함수/윈도우 함수 실습 재료 제공
+-- ---------------------------------------------------------------------
+
+ALTER TABLE POSTS ADD (
+    view_count     NUMBER,
+    reaction_score NUMBER(10, 2)
+);
+
+ALTER TABLE COMMENTS ADD (
+    sentiment_score NUMBER(4, 2)
+);
+
+-- 조회수(view_count): 100 + (좋아요 수 * 12) + (댓글 수 * 3)
+UPDATE POSTS p
+SET view_count = 100
+    + (SELECT COUNT(*) FROM LIKES l WHERE l.post_id = p.post_id) * 12
+    + (SELECT COUNT(*) FROM COMMENTS c WHERE c.post_id = p.post_id) * 3;
+
+-- 반응점수(reaction_score): 좋아요 1점 + 댓글 1.5점의 가중 합산
+UPDATE POSTS p
+SET reaction_score = NVL((SELECT COUNT(*) FROM LIKES l WHERE l.post_id = p.post_id), 0) * 1
+                  + NVL((SELECT COUNT(*) FROM COMMENTS c WHERE c.post_id = p.post_id), 0) * 1.5;
+
+-- 코멘트 감성 점수(sentiment_score): 단순 규칙 기반 예시
+--  - 느낌표 포함: 0.85
+--  - 물결/물음표 포함: 0.65
+--  - 슬픔 이모티콘(ㅠ/ㅜ) 포함: 0.30
+--  - 기본: 0.60
+UPDATE COMMENTS c
+SET sentiment_score = CASE
+    WHEN c.comment_text LIKE '%!%' THEN 0.85
+    WHEN c.comment_text LIKE '%?%' OR c.comment_text LIKE '%~%' THEN 0.65
+    WHEN c.comment_text LIKE '%ㅠ%' OR c.comment_text LIKE '%ㅜ%' THEN 0.30
+    ELSE 0.60
+END;
+
+COMMIT;
+
+-- ---------------------------------------------------------------------
+-- E-3) UNPIVOT 전용 와이드 테이블
+--  - USER_YEARLY_POSTS_WIDE: 연도별 게시물 수(0은 NULL 처리) → UNPIVOT 실습 최적화
+--  - USER_POSTTYPE_WIDE: 게시물 타입별 건수(0은 NULL 처리) → UNPIVOT 실습 최적화
+-- ---------------------------------------------------------------------
+
+-- 연도별 게시물 수 와이드 테이블
+CREATE TABLE USER_YEARLY_POSTS_WIDE (
+    user_id     NUMBER CONSTRAINT pk_user_yearly_posts_wide PRIMARY KEY,
+    posts_2022  NUMBER,
+    posts_2023  NUMBER,
+    posts_2024  NUMBER
+);
+
+INSERT INTO USER_YEARLY_POSTS_WIDE (user_id, posts_2022, posts_2023, posts_2024)
+SELECT u.user_id,
+       NULLIF((SELECT COUNT(*) FROM POSTS p WHERE p.user_id = u.user_id AND EXTRACT(YEAR FROM p.creation_date) = 2022), 0) AS posts_2022,
+       NULLIF((SELECT COUNT(*) FROM POSTS p WHERE p.user_id = u.user_id AND EXTRACT(YEAR FROM p.creation_date) = 2023), 0) AS posts_2023,
+       NULLIF((SELECT COUNT(*) FROM POSTS p WHERE p.user_id = u.user_id AND EXTRACT(YEAR FROM p.creation_date) = 2024), 0) AS posts_2024
+FROM USERS u;
+
+COMMIT;
+
+-- 게시물 타입별 건수 와이드 테이블
+CREATE TABLE USER_POSTTYPE_WIDE (
+    user_id      NUMBER CONSTRAINT pk_user_posttype_wide PRIMARY KEY,
+    photo_count  NUMBER,
+    video_count  NUMBER
+);
+
+INSERT INTO USER_POSTTYPE_WIDE (user_id, photo_count, video_count)
+SELECT u.user_id,
+       NULLIF((SELECT COUNT(*) FROM POSTS p WHERE p.user_id = u.user_id AND p.post_type = 'photo'), 0) AS photo_count,
+        NULLIF((SELECT COUNT(*) FROM POSTS p WHERE p.user_id = u.user_id AND p.post_type = 'video'), 0) AS video_count
+FROM USERS u;
+
+COMMIT;
+
+-- 주의: 와이드 테이블은 UNPIVOT 실습 전용으로 유지/재생성 가능
+-- 예) UNPIVOT 샘플
+-- SELECT user_id, year_label, posts
+-- FROM USER_YEARLY_POSTS_WIDE
+-- UNPIVOT (posts FOR year_label IN (posts_2022 AS '2022', posts_2023 AS '2023', posts_2024 AS '2024'));
+
