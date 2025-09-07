@@ -1647,4 +1647,3 @@ COMMIT;
 -- SELECT user_id, year_label, posts
 -- FROM USER_YEARLY_POSTS_WIDE
 -- UNPIVOT (posts FOR year_label IN (posts_2022 AS '2022', posts_2023 AS '2023', posts_2024 AS '2024'));
-
