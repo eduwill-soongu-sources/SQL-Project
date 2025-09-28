@@ -1,0 +1,138 @@
+
+SELECT * FROM USERS;
+
+SELECT * FROM POSTS;
+
+-- 실습용 미니 테이블 생성 (강의 화면용)
+CREATE TABLE DEPT_T (dept_id NUMBER, dept_name VARCHAR2(20));
+
+CREATE TABLE EMP_T (emp_id NUMBER, emp_name VARCHAR2(20), dept_id NUMBER);
+
+INSERT INTO DEPT_T VALUES (10, '개발팀');
+INSERT INTO DEPT_T VALUES (20, '기획팀');
+
+INSERT INTO EMP_T VALUES (101, '라이언', 10);
+INSERT INTO EMP_T VALUES (102, '어피치', 10);
+INSERT INTO EMP_T VALUES (103, '네오', 20);
+COMMIT;
+-- 일단 가능한 모든 조합을 다 만들어보자! (CROSS JOIN)
+
+SELECT * FROM DEPT_T;
+SELECT * FROM EMP_T;
+
+-- JOIN 기초
+SELECT EMP_T.EMP_NAME, DEPT_T.DEPT_NAME
+FROM EMP_T, DEPT_T
+WHERE EMP_T.DEPT_ID = DEPT_T.DEPT_ID
+;
+
+SELECT E.EMP_NAME, D.DEPT_NAME
+FROM EMP_T E, DEPT_T D
+WHERE E.DEPT_ID = D.DEPT_ID
+;
+
+-- ANSI 표준 조인 (inner)
+SELECT U.USERNAME, P.CONTENT
+FROM USERS U
+INNER JOIN POSTS P
+ON U.USER_ID = P.USER_ID
+;
+
+-- Oracle 조인 (inner)
+SELECT U.USERNAME, P.CONTENT
+FROM USERS U, POSTS P
+WHERE U.USER_ID = P.USER_ID
+;
+
+SELECT U.USERNAME, P.CONTENT
+FROM USERS U
+INNER JOIN POSTS P
+ON U.USER_ID = P.USER_ID
+;
+
+-- ANSI 표준 조인 (inner) : USING절 사용 (ON을 대체)
+SELECT U.USERNAME, P.CONTENT
+FROM USERS U
+INNER JOIN POSTS P
+USING (USER_ID)
+;
+
+-- ANSI 표준 조인 (inner) : ON절 사용 
+SELECT U.USER_ID, P.USER_ID
+FROM USERS U
+INNER JOIN POSTS P
+ON U.USER_ID = P.USER_ID
+;
+
+-- ANSI 표준 조인 (inner) : USING절 사용 (ON을 대체)
+SELECT USER_ID, U.USERNAME, P.CONTENT
+FROM USERS U
+INNER JOIN POSTS P
+USING (USER_ID)
+;
+
+-- 자연 조인: 두 테이블에서 이름과 타입이 같은 공통컬럼을 알아서매칭
+SELECT U.USERNAME, P.CONTENT, USER_ID
+FROM USERS U
+NATURAL JOIN POSTS P
+;
+
+-- 연습문제 1
+SELECT L.USER_ID, U.USERNAME, L.POST_ID 
+FROM LIKES L
+INNER JOIN USERS U
+ON L.USER_ID = U.USER_ID
+;
+
+SELECT L.USER_ID, U.USERNAME, L.POST_ID 
+FROM LIKES L, USERS U
+WHERE L.USER_ID = U.USER_ID
+;
+
+SELECT USER_ID, U.USERNAME, L.POST_ID 
+FROM LIKES L
+INNER JOIN USERS U
+USING (USER_ID)
+;
+
+SELECT USER_ID, U.USERNAME, L.POST_ID 
+FROM LIKES L
+NATURAL JOIN USERS U
+;
+
+-- 연습문제 2
+-- 1. COMMENTS 테이블과 USERS 테이블을 user_id로 조인합니다.
+-- 2. WHERE 절을 이용해 post_id가 2번인 댓글만 필터링합니다.
+SELECT 
+    c.comment_text, 
+    u.username AS "댓글 작성자", 
+    u.email AS "작성자 이메일"
+FROM COMMENTS c
+INNER JOIN USERS u 
+ON c.user_id = u.user_id
+WHERE c.post_id = 2;
+
+SELECT 
+    c.comment_text, 
+    u.username AS "댓글 작성자", 
+    u.email AS "작성자 이메일"
+FROM COMMENTS c, USERS u 
+WHERE c.user_id = u.user_id
+    AND c.post_id = 2;
+
+SELECT 
+    c.comment_text, 
+    u.username AS "댓글 작성자", 
+    u.email AS "작성자 이메일"
+FROM COMMENTS c
+INNER JOIN USERS u 
+USING (user_id)
+WHERE c.post_id = 2;
+
+SELECT 
+    c.comment_text, 
+    u.username AS "댓글 작성자", 
+    u.email AS "작성자 이메일"
+FROM COMMENTS c
+NATURAL JOIN USERS u 
+WHERE c.post_id = 2;
