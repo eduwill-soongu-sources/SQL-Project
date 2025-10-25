@@ -10,5 +10,7 @@ CREATE TABLE TEMP_TABLE (id NUMBER, name VARCHAR2(10));
 
 SELECT * FROM TEMP_TABLE;
 
+
+
 -- 테이블을 데이터베이스에서 완전히 삭제합니다.
 DROP TABLE TEMP_TABLE;
